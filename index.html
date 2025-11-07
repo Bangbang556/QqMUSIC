@@ -1,0 +1,995 @@
+<!DOCTYPE html>
+<html lang="zh-Hant">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Music</title>
+  <style>
+    :root {
+      --bg: #0b0f13;
+      --panel: #0f172a;
+      --text: #e5e7eb;
+      --muted: #9ca3af;
+      --white: #ffffff;
+      --white-edge: #d1d5db;
+      --white-bottom: #cfd6df;
+      --black: #0b1220;
+      --black-top: #1f2937;
+      --primary: #60a5fa;
+      /* 真實比例近似：黑鍵寬度約 0.6~0.65 個白鍵寬度，高度約白鍵的 ~60% */
+      --black-width: 0.62;
+      --black-left-offset: 0.31; /* = --black-width / 2，用於中心對齊縫隙 */
+    }
+    * { box-sizing: border-box; }
+    html, body { margin: 0; padding: 0; background: var(--bg); color: var(--text); font-family: ui-sans-serif, system-ui, -apple-system, Segoe UI, Roboto, "Noto Sans", Arial; }
+
+    header {
+      position: sticky; top: 0; z-index: 5; background: var(--panel);
+      border-bottom: 1px solid #1f2937; padding: 12px clamp(12px, 3vw, 24px);
+      display: flex; align-items: center; justify-content: space-between; gap: 12px;
+    }
+    h1 { margin: 0; font-size: clamp(18px, 2.4vw, 22px); }
+    .controls { display: flex; gap: 12px; align-items: center; flex-wrap: wrap; }
+    .control { display: flex; gap: 8px; align-items: center; font-size: 14px; color: var(--muted); }
+    input[type="range"] { width: 140px; }
+    button, select, input[type="checkbox"] { cursor: pointer; }
+    .btn { border: 1px solid #334155; background: #0b1220; color: var(--text); border-radius: 8px; padding: 8px 12px; }
+    .btn.primary { background: #1e293b; border-color: var(--primary); color: #e2e8f0; }
+
+    main { padding: 20px clamp(10px, 3vw, 24px); }
+    .keyboard {
+      position: relative; user-select: none; width: min(1400px, 96vw); margin: 0 auto; aspect-ratio: 7.5 / 2.2;
+      background: #0a0f1a; border: 1px solid #1f2937; border-radius: 12px; padding: 10px;
+    }
+    .keys { position: relative; height: 100%; }
+    .white-keys {
+      display: grid; grid-auto-flow: column; grid-auto-columns: 1fr; height: 100%;
+      position: relative; z-index: 1; gap: 0;
+    }
+    .key { position: relative; display: flex; align-items: flex-end; justify-content: center; -webkit-tap-highlight-color: transparent; }
+    .key.white {
+      background: var(--white); border: 1px solid var(--white-edge);
+      border-bottom: 4px solid var(--white-bottom); border-radius: 0 0 10px 10px;
+      box-shadow: inset 0 -2px 0 rgba(0,0,0,0.06); transition: transform 60ms linear, filter 80ms ease;
+      cursor: pointer;
+    }
+    .key.white.active { transform: translateY(1px); filter: brightness(0.97); }
+    .black-keys { position: absolute; inset: 10px 10px 10px 10px; z-index: 2; pointer-events: none; }
+    .key.black {
+      pointer-events: auto; position: absolute; top: 0;
+      width: calc((100% / var(--white-count)) * var(--black-width)); height: 62%;
+      background: linear-gradient(var(--black-top), var(--black));
+      border: 1px solid #0b1220; border-radius: 0 0 10px 10px;
+      box-shadow: 0 10px 18px rgba(0,0,0,0.45), inset 0 -2px 0 rgba(255,255,255,0.05);
+      transition: transform 60ms linear, filter 80ms ease;
+      cursor: pointer;
+    }
+    .key.black.active { transform: translateY(1px); filter: brightness(1.05); }
+
+    .status { margin: 10px auto 0; max-width: 1200px; color: #9ca3af; font-size: 13px; display: flex; gap: 10px; flex-wrap: wrap; justify-content: center; }
+    .pill { background: #0b1220; border: 1px solid #1f2937; color: #cbd5e1; padding: 4px 8px; border-radius: 999px; }
+    
+    .bottom-section {
+      display: grid;
+      grid-template-columns: 1fr auto 1fr;
+      gap: 20px;
+      max-width: 1400px;
+      margin: 30px auto 0;
+      padding: 0 clamp(10px, 3vw, 24px);
+      align-items: start;
+    }
+    
+    .songs-panel {
+      background: var(--panel);
+      border: 1px solid #1f2937;
+      border-radius: 12px;
+      padding: 16px;
+    }
+    
+    .songs-panel h2 {
+      margin: 0 0 12px 0;
+      font-size: 16px;
+      color: var(--text);
+    }
+    
+    .songs-list {
+      display: flex;
+      flex-direction: column;
+      gap: 8px;
+      max-height: 200px;
+      overflow-y: auto;
+    }
+    
+    .song-item {
+      background: #0b1220;
+      border: 1px solid #1f2937;
+      border-radius: 8px;
+      padding: 10px 12px;
+      color: var(--text);
+      cursor: pointer;
+      transition: all 0.2s ease;
+      font-size: 14px;
+    }
+    
+    .song-item:hover {
+      background: #1e293b;
+      border-color: var(--primary);
+    }
+    
+    .song-item.active {
+      background: #1e293b;
+      border-color: var(--primary);
+      color: var(--primary);
+    }
+    
+    .instrument-display {
+      background: var(--panel);
+      border: 1px solid #1f2937;
+      border-radius: 12px;
+      padding: 20px;
+      text-align: center;
+      min-width: 150px;
+    }
+    
+    .instrument-display h2 {
+      margin: 0 0 12px 0;
+      font-size: 16px;
+      color: var(--text);
+    }
+    
+    .instrument-icon-large {
+      font-size: 48px;
+      margin: 10px 0;
+    }
+    
+    .instrument-name {
+      font-size: 18px;
+      color: var(--primary);
+      font-weight: 600;
+    }
+    
+    .add-panel {
+      background: var(--panel);
+      border: 1px solid #1f2937;
+      border-radius: 12px;
+      padding: 16px;
+      text-align: center;
+    }
+    
+    .add-panel h2 {
+      margin: 0 0 12px 0;
+      font-size: 16px;
+      color: var(--text);
+    }
+    
+    .btn-add {
+      background: var(--primary);
+      border: none;
+      color: white;
+      border-radius: 8px;
+      padding: 12px 24px;
+      font-size: 14px;
+      cursor: pointer;
+      transition: all 0.2s ease;
+      width: 100%;
+    }
+    
+    .btn-add:hover {
+      background: #3b82f6;
+      transform: translateY(-1px);
+    }
+    
+    .empty-state {
+      color: var(--muted);
+      font-size: 13px;
+      padding: 20px;
+      text-align: center;
+    }
+    
+    @media (max-width: 768px) {
+      .bottom-section {
+        grid-template-columns: 1fr;
+      }
+    }
+  </style>
+</head>
+<body>
+  <header>
+    <h1>Music</h1>
+    <div class="controls">
+      <label class="control">
+        <span>音量</span>
+        <input id="volume" type="range" min="0" max="1" step="0.01" value="0.7" />
+      </label>
+      <label class="control">
+        <span>延音</span>
+        <input id="sustain" type="checkbox" />
+      </label>
+      <label class="control">
+        <span>起始八度</span>
+        <select id="octave">
+          <option value="3">3</option>
+          <option value="4" selected>4</option>
+          <option value="5">5</option>
+        </select>
+      </label>
+      <label class="control">
+        <span>樂器</span>
+        <select id="instrument">
+          <option value="piano" selected>鋼琴</option>
+          <option value="strings">弦樂</option>
+          <option value="violin">小提琴</option>
+          <option value="flute">長笛</option>
+          <option value="guitar">吉他</option>
+        </select>
+      </label>
+      <button id="power" class="btn primary">啟動音訊</button>
+    </div>
+  </header>
+
+  <main>
+    <div id="keyboard" class="keyboard" aria-label="Music" role="application">
+      <div class="keys">
+        <div class="white-keys" id="whiteContainer"></div>
+        <div class="black-keys" id="blackContainer"></div>
+      </div>
+    </div>
+    <div class="status">
+      <span class="pill">白鍵顯示：C D E F G A B</span>
+      <span class="pill">黑鍵：C# D# F# G# A#</span>
+      <span class="pill">空白鍵：切換延音</span>
+    </div>
+    
+    <div class="bottom-section">
+      <div class="songs-panel">
+        <h2>曲目</h2>
+        <div class="songs-list" id="songsList">
+          <div class="empty-state">暫無曲目</div>
+        </div>
+      </div>
+      
+      <div class="instrument-display">
+        <h2>樂器</h2>
+        <div class="instrument-icon-large" id="currentInstrumentIcon">🎹</div>
+        <div class="instrument-name" id="currentInstrumentName">鋼琴</div>
+      </div>
+      
+      <div class="add-panel">
+        <h2>新增</h2>
+        <button class="btn-add" id="addSongBtn">+ 新增曲目</button>
+      </div>
+    </div>
+  </main>
+
+  <script>
+    (() => {
+      const whiteContainer = document.getElementById('whiteContainer');
+      const blackContainer = document.getElementById('blackContainer');
+      const volumeEl = document.getElementById('volume');
+      const sustainEl = document.getElementById('sustain');
+      const octaveEl = document.getElementById('octave');
+      const instrumentEl = document.getElementById('instrument');
+      const powerEl = document.getElementById('power');
+      const keyboard = document.getElementById('keyboard');
+      const songsList = document.getElementById('songsList');
+      const currentInstrumentIcon = document.getElementById('currentInstrumentIcon');
+      const currentInstrumentName = document.getElementById('currentInstrumentName');
+      const addSongBtn = document.getElementById('addSongBtn');
+
+      // 14 白鍵 = 2 個完整八度（C..B + C..B），符合 2-3 黑鍵分佈
+      const WHITE_COUNT = 14;
+      const WHITE_TO_SEMITONE = [0, 2, 4, 5, 7, 9, 11]; // 對應 C D E F G A B
+      const WHITE_LABELS = ['C','D','E','F','G','A','B'];
+      const NOTE_NAMES = ['C','C#','D','D#','E','F','F#','G','G#','A','A#','B'];
+      // 黑鍵出現在每八度內的 C、D、F、G、A 之後（位於白鍵 i 與 i+1 的間隙）
+      const BLACK_AFTER_WHITE_STEP = new Set([0, 1, 3, 4, 5]);
+
+      let baseOctave = parseInt(octaveEl.value, 10);
+      let sustain = false;
+      
+      // 曲目列表
+      let songs = [];
+      let currentSongIndex = -1;
+
+      // WebAudio
+      let audio = null, masterGain = null;
+      const activeVoices = new Map();
+      const sustained = new Set();
+
+      function ensureAudio() {
+        if (audio) return;
+        audio = new (window.AudioContext || window.webkitAudioContext)();
+        masterGain = audio.createGain();
+        masterGain.gain.value = parseFloat(volumeEl.value || '0.7');
+        masterGain.connect(audio.destination);
+      }
+
+      function midiFrom(oct, semi) { return 60 + (oct - 4) * 12 + semi; } // C4=60
+      function freq(midi) { return 440 * Math.pow(2, (midi - 69) / 12); }
+
+      function makeVoice(f) {
+        const t = audio.currentTime;
+        const instrument = instrumentEl.value;
+        const gain = audio.createGain(); gain.gain.value = 0;
+
+        if (instrument === 'strings') {
+          // 弦樂器音色：多個振盪器混合，更溫暖的聲音
+          const filter = audio.createBiquadFilter();
+          filter.type = 'lowpass';
+          filter.frequency.value = Math.min(5000, Math.max(1200, f * 4));
+          filter.Q.value = 1.2;
+
+          // 主音調：使用多個振盪器創造豐富的諧波
+          const osc1 = audio.createOscillator(); osc1.type = 'sine'; osc1.frequency.setValueAtTime(f, t);
+          const osc2 = audio.createOscillator(); osc2.type = 'triangle'; osc2.frequency.setValueAtTime(f, t);
+          const osc3 = audio.createOscillator(); osc3.type = 'sawtooth'; osc3.frequency.setValueAtTime(f * 0.5, t);
+          
+          // 添加和聲
+          const osc4 = audio.createOscillator(); osc4.type = 'sine'; osc4.frequency.setValueAtTime(f * 2, t);
+          osc4.detune.setValueAtTime(+3, t);
+          
+          // 創建混合器
+          const mixer = audio.createGain();
+          mixer.gain.value = 0.5;
+          
+          // 連接：主音調較強，和聲較弱
+          const osc1Gain = audio.createGain(); osc1Gain.gain.value = 0.4;
+          const osc2Gain = audio.createGain(); osc2Gain.gain.value = 0.35;
+          const osc3Gain = audio.createGain(); osc3Gain.gain.value = 0.15;
+          const osc4Gain = audio.createGain(); osc4Gain.gain.value = 0.1;
+          
+          osc1.connect(osc1Gain); osc2.connect(osc2Gain); osc3.connect(osc3Gain); osc4.connect(osc4Gain);
+          osc1Gain.connect(mixer); osc2Gain.connect(mixer); osc3Gain.connect(mixer); osc4Gain.connect(mixer);
+          
+          // 添加輕微的顫音效果
+          const lfo = audio.createOscillator();
+          lfo.type = 'sine';
+          lfo.frequency.setValueAtTime(5.5, t); // 顫音頻率
+          
+          const lfoGain = audio.createGain();
+          lfoGain.gain.value = 2; // 顫音深度
+          
+          lfo.connect(lfoGain);
+          lfoGain.connect(osc1.frequency);
+          lfoGain.connect(osc2.frequency);
+          
+          mixer.connect(filter);
+          filter.connect(gain);
+          gain.connect(masterGain);
+          
+          osc1.start(); osc2.start(); osc3.start(); osc4.start(); lfo.start();
+          
+          return { gain, filter, a: osc1, b: osc2, c: osc3, d: osc4, lfo, mixer };
+        } else if (instrument === 'violin') {
+          // 小提琴音色：明亮的高頻，豐富的諧波
+          const filter = audio.createBiquadFilter();
+          filter.type = 'bandpass';
+          filter.frequency.value = Math.min(6000, Math.max(1500, f * 5));
+          filter.Q.value = 1.8;
+
+          const osc1 = audio.createOscillator(); osc1.type = 'sine'; osc1.frequency.setValueAtTime(f, t);
+          const osc2 = audio.createOscillator(); osc2.type = 'triangle'; osc2.frequency.setValueAtTime(f, t);
+          const osc3 = audio.createOscillator(); osc3.type = 'sawtooth'; osc3.frequency.setValueAtTime(f * 2, t);
+          osc3.detune.setValueAtTime(+4, t);
+          
+          const mixer = audio.createGain();
+          mixer.gain.value = 0.55;
+          
+          const osc1Gain = audio.createGain(); osc1Gain.gain.value = 0.5;
+          const osc2Gain = audio.createGain(); osc2Gain.gain.value = 0.35;
+          const osc3Gain = audio.createGain(); osc3Gain.gain.value = 0.15;
+          
+          osc1.connect(osc1Gain); osc2.connect(osc2Gain); osc3.connect(osc3Gain);
+          osc1Gain.connect(mixer); osc2Gain.connect(mixer); osc3Gain.connect(mixer);
+          
+          // 顫音效果
+          const lfo = audio.createOscillator();
+          lfo.type = 'sine';
+          lfo.frequency.setValueAtTime(6.0, t);
+          
+          const lfoGain = audio.createGain();
+          lfoGain.gain.value = 2.5;
+          
+          lfo.connect(lfoGain);
+          lfoGain.connect(osc1.frequency);
+          lfoGain.connect(osc2.frequency);
+          
+          mixer.connect(filter);
+          filter.connect(gain);
+          gain.connect(masterGain);
+          
+          osc1.start(); osc2.start(); osc3.start(); lfo.start();
+          
+          return { gain, filter, a: osc1, b: osc2, c: osc3, lfo, mixer };
+        } else if (instrument === 'flute') {
+          // 長笛音色：純淨的sine波，高頻明亮
+          const filter = audio.createBiquadFilter();
+          filter.type = 'bandpass';
+          filter.frequency.value = Math.min(8000, Math.max(2000, f * 6));
+          filter.Q.value = 2.0;
+
+          const osc1 = audio.createOscillator(); osc1.type = 'sine'; osc1.frequency.setValueAtTime(f, t);
+          const osc2 = audio.createOscillator(); osc2.type = 'sine'; osc2.frequency.setValueAtTime(f * 2, t);
+          osc2.detune.setValueAtTime(+2, t);
+          
+          const mixer = audio.createGain();
+          mixer.gain.value = 0.6;
+          
+          const osc1Gain = audio.createGain(); osc1Gain.gain.value = 0.7;
+          const osc2Gain = audio.createGain(); osc2Gain.gain.value = 0.3;
+          
+          osc1.connect(osc1Gain); osc2.connect(osc2Gain);
+          osc1Gain.connect(mixer); osc2Gain.connect(mixer);
+          
+          // 輕微的顫音
+          const lfo = audio.createOscillator();
+          lfo.type = 'sine';
+          lfo.frequency.setValueAtTime(6.0, t);
+          
+          const lfoGain = audio.createGain();
+          lfoGain.gain.value = 1.5;
+          
+          lfo.connect(lfoGain);
+          lfoGain.connect(osc1.frequency);
+          
+          mixer.connect(filter);
+          filter.connect(gain);
+          gain.connect(masterGain);
+          
+          osc1.start(); osc2.start(); lfo.start();
+          
+          return { gain, filter, a: osc1, b: osc2, lfo, mixer };
+        } else if (instrument === 'guitar') {
+          // 吉他音色：豐富的諧波，類似撥弦
+          const filter = audio.createBiquadFilter();
+          filter.type = 'lowpass';
+          filter.frequency.value = Math.min(4000, Math.max(1000, f * 3.5));
+          filter.Q.value = 1.5;
+
+          const osc1 = audio.createOscillator(); osc1.type = 'sawtooth'; osc1.frequency.setValueAtTime(f, t);
+          const osc2 = audio.createOscillator(); osc2.type = 'square'; osc2.frequency.setValueAtTime(f * 2, t);
+          osc2.detune.setValueAtTime(-3, t);
+          const osc3 = audio.createOscillator(); osc3.type = 'triangle'; osc3.frequency.setValueAtTime(f * 0.5, t);
+          
+          const mixer = audio.createGain();
+          mixer.gain.value = 0.55;
+          
+          const osc1Gain = audio.createGain(); osc1Gain.gain.value = 0.5;
+          const osc2Gain = audio.createGain(); osc2Gain.gain.value = 0.3;
+          const osc3Gain = audio.createGain(); osc3Gain.gain.value = 0.2;
+          
+          osc1.connect(osc1Gain); osc2.connect(osc2Gain); osc3.connect(osc3Gain);
+          osc1Gain.connect(mixer); osc2Gain.connect(mixer); osc3Gain.connect(mixer);
+          
+          mixer.connect(filter);
+          filter.connect(gain);
+          gain.connect(masterGain);
+          
+          osc1.start(); osc2.start(); osc3.start();
+          
+          return { gain, filter, a: osc1, b: osc2, c: osc3, mixer };
+        } else {
+          // 鋼琴音色：原有邏輯
+        const filter = audio.createBiquadFilter();
+        filter.type = 'lowpass';
+        filter.frequency.value = Math.min(1800, Math.max(800, f * 3));
+        filter.Q.value = 0.7;
+
+        const a = audio.createOscillator(); a.type = 'triangle'; a.frequency.setValueAtTime(f, t);
+        const b = audio.createOscillator(); b.type = 'sawtooth'; b.frequency.setValueAtTime(f * 2, t); b.detune.setValueAtTime(+5, t);
+
+        a.connect(filter); b.connect(filter); filter.connect(gain); gain.connect(masterGain);
+        a.start(); b.start();
+        return { gain, filter, a, b };
+        }
+      }
+
+      function envOn(g, vel = 1.0) {
+        const t = audio.currentTime;
+        const instrument = instrumentEl.value;
+        let atk, dec, sus;
+        
+        if (instrument === 'strings') {
+          // 弦樂器：更長的attack，更平滑的decay
+          atk = 0.15; dec = 0.3; sus = 0.65;
+        } else if (instrument === 'violin') {
+          // 小提琴：中等attack，平滑decay
+          atk = 0.12; dec = 0.25; sus = 0.7;
+        } else if (instrument === 'flute') {
+          // 長笛：快速attack，中等decay
+          atk = 0.05; dec = 0.2; sus = 0.7;
+        } else if (instrument === 'guitar') {
+          // 吉他：快速attack，快速decay（撥弦效果）
+          atk = 0.01; dec = 0.15; sus = 0.4;
+        } else {
+          // 鋼琴：原有參數
+          atk = 0.01; dec = 0.12; sus = 0.58;
+        }
+        
+        g.gain.cancelScheduledValues(t);
+        g.gain.setValueAtTime(0, t);
+        g.gain.linearRampToValueAtTime(0.95 * vel, t + atk);
+        g.gain.linearRampToValueAtTime(sus * vel, t + atk + dec);
+      }
+      function envOff(g) {
+        const t = audio.currentTime;
+        const instrument = instrumentEl.value;
+        let rel;
+        
+        if (instrument === 'strings') {
+          rel = 0.8; // 弦樂器更長的release
+        } else if (instrument === 'violin') {
+          rel = 0.7; // 小提琴較長的release
+        } else if (instrument === 'flute') {
+          rel = 0.5; // 長笛中等release
+        } else if (instrument === 'guitar') {
+          rel = 0.4; // 吉他較短的release
+        } else {
+          rel = 0.3; // 鋼琴
+        }
+        
+        g.gain.cancelScheduledValues(t);
+        g.gain.setTargetAtTime(0, t, rel);
+      }
+
+      function idOf(o, s) { return o + ':' + s; }
+      function setActive(id, on) {
+        const el = document.querySelector('[data-id="' + id + '"]');
+        if (el) el.classList.toggle('active', on);
+      }
+
+      function noteOn(o, s, vel = 1.0) {
+        ensureAudio();
+        const id = idOf(o, s);
+        if (activeVoices.has(id)) return;
+        const v = makeVoice(freq(midiFrom(o, s)));
+        activeVoices.set(id, v);
+        envOn(v.gain, vel);
+        setActive(id, true);
+      }
+      function noteOff(o, s) {
+        const id = idOf(o, s);
+        const v = activeVoices.get(id);
+        if (!v) return;
+        if (sustain) { sustained.add(id); return; }
+        envOff(v.gain);
+        const instrument = instrumentEl.value;
+        let stopAt, cleanupDelay;
+        if (instrument === 'strings') {
+          stopAt = audio.currentTime + 1.2;
+          cleanupDelay = 1300;
+        } else if (instrument === 'violin') {
+          stopAt = audio.currentTime + 1.0;
+          cleanupDelay = 1100;
+        } else if (instrument === 'flute') {
+          stopAt = audio.currentTime + 0.9;
+          cleanupDelay = 1000;
+        } else if (instrument === 'guitar') {
+          stopAt = audio.currentTime + 0.7;
+          cleanupDelay = 800;
+        } else {
+          stopAt = audio.currentTime + 0.8;
+          cleanupDelay = 900;
+        }
+        
+        // 停止所有振盪器
+        v.a.stop(stopAt);
+        v.b.stop(stopAt);
+        if (v.c) v.c.stop(stopAt);
+        if (v.d) v.d.stop(stopAt);
+        if (v.lfo) v.lfo.stop(stopAt);
+        
+        setTimeout(() => {
+          v.gain.disconnect();
+          v.filter.disconnect();
+          if (v.mixer) v.mixer.disconnect();
+        }, cleanupDelay);
+        activeVoices.delete(id);
+        setActive(id, false);
+      }
+      function flushSustain() {
+        for (const id of sustained) {
+          const [o, s] = id.split(':').map(Number);
+          const v = activeVoices.get(id);
+          if (v) {
+            envOff(v.gain);
+            const instrument = instrumentEl.value;
+            let stopAt, cleanupDelay;
+            if (instrument === 'strings') {
+              stopAt = audio.currentTime + 1.1;
+              cleanupDelay = 1200;
+            } else if (instrument === 'violin') {
+              stopAt = audio.currentTime + 0.9;
+              cleanupDelay = 1000;
+            } else if (instrument === 'flute') {
+              stopAt = audio.currentTime + 0.8;
+              cleanupDelay = 900;
+            } else if (instrument === 'guitar') {
+              stopAt = audio.currentTime + 0.6;
+              cleanupDelay = 700;
+            } else {
+              stopAt = audio.currentTime + 0.7;
+              cleanupDelay = 800;
+            }
+            
+            // 停止所有振盪器
+            v.a.stop(stopAt);
+            v.b.stop(stopAt);
+            if (v.c) v.c.stop(stopAt);
+            if (v.d) v.d.stop(stopAt);
+            if (v.lfo) v.lfo.stop(stopAt);
+            
+            setTimeout(() => {
+              v.gain.disconnect();
+              v.filter.disconnect();
+              if (v.mixer) v.mixer.disconnect();
+            }, cleanupDelay);
+            activeVoices.delete(id);
+            setActive(id, false);
+          }
+        }
+        sustained.clear();
+      }
+
+      function whiteMeta(i) { return { octOff: Math.floor(i / 7), step: i % 7 }; }
+
+      function build() {
+        whiteContainer.innerHTML = '';
+        blackContainer.innerHTML = '';
+        blackContainer.style.setProperty('--white-count', String(WHITE_COUNT));
+        whiteContainer.style.setProperty('--white-count', String(WHITE_COUNT));
+
+        for (let i = 0; i < WHITE_COUNT; i++) {
+          const { octOff, step } = whiteMeta(i);
+          const o = baseOctave + octOff;
+          const semi = WHITE_TO_SEMITONE[step];
+
+          // 白鍵：僅顯示字母（不顯示八度數字）
+          const wid = idOf(o, semi);
+          const w = document.createElement('div');
+          w.className = 'key white';
+          w.dataset.id = wid;
+          w.dataset.octave = String(o);
+          w.dataset.semi = String(semi);
+          attachPointer(w);
+          whiteContainer.appendChild(w);
+
+          // 黑鍵：在 C、D、F、G、A 之後，位於白鍵 i 與 i+1 的間隙
+          if (BLACK_AFTER_WHITE_STEP.has(step) && i + 1 < WHITE_COUNT) {
+            const bSemi = (semi + 1) % 12; // 升半音
+            const bid = idOf(o, bSemi);
+            const b = document.createElement('div');
+            b.className = 'key black';
+            b.dataset.id = bid;
+            b.dataset.octave = String(o);
+            b.dataset.semi = String(bSemi);
+
+            // 黑鍵中心對齊白鍵 i 的右邊界（亦即 i+1 的左邊界），以等分法保持精準
+            b.style.left = `calc((100% / ${WHITE_COUNT}) * ${i + 1} - (100% / ${WHITE_COUNT}) * var(--black-left-offset))`;
+
+            attachPointer(b);
+            blackContainer.appendChild(b);
+          }
+        }
+      }
+
+      function parse(el) { return { o: parseInt(el.dataset.octave, 10), s: parseInt(el.dataset.semi, 10) }; }
+      
+      // 追蹤活動的按鍵以避免重複觸發
+      const activeKeys = new Map();
+      
+      function attachPointer(el) {
+        let currentId = null;
+        
+        function handleDown(e) {
+          e.preventDefault();
+          e.stopPropagation();
+          if (currentId) return; // 防止重複觸發
+          
+          const { o, s } = parse(el);
+          const id = idOf(o, s);
+          currentId = id;
+          
+          if (el.setPointerCapture && e.pointerId !== undefined) {
+            try {
+          el.setPointerCapture(e.pointerId);
+            } catch (err) {
+              // 忽略 capture 錯誤
+            }
+          }
+          
+          noteOn(o, s, 1.0);
+          activeKeys.set(el, id);
+        }
+        
+        function handleUp(e) {
+          e.preventDefault();
+          e.stopPropagation();
+          
+          const { o, s } = parse(el);
+          const id = idOf(o, s);
+          
+          if (el.releasePointerCapture && e.pointerId !== undefined) {
+            try {
+              el.releasePointerCapture(e.pointerId);
+            } catch (err) {
+              // 忽略 release 錯誤
+            }
+          }
+          
+          if (currentId === id) {
+            noteOff(o, s);
+            currentId = null;
+            activeKeys.delete(el);
+          }
+        }
+        
+        function handleCancel(e) {
+          e.preventDefault();
+          if (currentId) {
+            const { o, s } = parse(el);
+            noteOff(o, s);
+            currentId = null;
+            activeKeys.delete(el);
+          }
+          if (el.releasePointerCapture && e.pointerId !== undefined) {
+            try {
+              el.releasePointerCapture(e.pointerId);
+            } catch (err) {}
+          }
+        }
+        
+        function handleLeave(e) {
+          if (currentId) {
+          const { o, s } = parse(el);
+          noteOff(o, s);
+            currentId = null;
+            activeKeys.delete(el);
+          }
+        }
+        
+        el.addEventListener('pointerdown', handleDown);
+        el.addEventListener('pointerup', handleUp);
+        el.addEventListener('pointercancel', handleCancel);
+        el.addEventListener('pointerleave', handleLeave);
+        el.addEventListener('mouseleave', handleLeave);
+        
+        // 為了兼容性，也處理 mouse 事件
+        el.addEventListener('mousedown', (e) => {
+          if (e.button === 0) handleDown(e);
+        });
+        el.addEventListener('mouseup', (e) => {
+          if (e.button === 0) handleUp(e);
+        });
+        el.addEventListener('mouseleave', handleLeave);
+        
+        // 觸摸事件處理
+        el.addEventListener('touchstart', (e) => {
+          e.preventDefault();
+          handleDown(e);
+        });
+        el.addEventListener('touchend', (e) => {
+          e.preventDefault();
+          handleUp(e);
+        });
+        el.addEventListener('touchcancel', (e) => {
+          e.preventDefault();
+          handleCancel(e);
+        });
+      }
+      
+      // 全局處理：當指針離開鍵盤區域時釋放所有按鍵
+      document.addEventListener('pointerup', (e) => {
+        if (keyboard && !keyboard.contains(e.target)) {
+          flushAllKeys();
+        }
+      });
+      document.addEventListener('pointercancel', () => {
+        flushAllKeys();
+      });
+      window.addEventListener('blur', () => {
+        flushAllKeys();
+      });
+      
+      // 當滑鼠離開鍵盤區域時也釋放
+      keyboard.addEventListener('mouseleave', () => {
+        flushAllKeys();
+      });
+      
+      function flushAllKeys() {
+        // 先停止所有活動的按鍵
+        for (const [el, id] of activeKeys) {
+          if (el && el.dataset && el.dataset.octave && el.dataset.semi) {
+            try {
+          const { o, s } = parse(el);
+          noteOff(o, s);
+            } catch (e) {
+              // 忽略解析錯誤
+            }
+          }
+        }
+        activeKeys.clear();
+        // 同時清理所有活動的聲音
+        if (audio) {
+          for (const [id, v] of activeVoices) {
+            if (v) {
+              try {
+                envOff(v.gain);
+                const instrument = instrumentEl.value;
+                let stopAt = audio.currentTime + 0.3;
+                if (instrument === 'strings' || instrument === 'violin') {
+                  stopAt = audio.currentTime + 0.4;
+                } else if (instrument === 'flute') {
+                  stopAt = audio.currentTime + 0.35;
+                }
+                v.a.stop(stopAt);
+                v.b.stop(stopAt);
+                if (v.c) v.c.stop(stopAt);
+                if (v.d) v.d.stop(stopAt);
+                if (v.lfo) v.lfo.stop(stopAt);
+              } catch (e) {
+                // 忽略停止錯誤
+              }
+              setTimeout(() => {
+                try {
+                  v.gain.disconnect();
+                  v.filter.disconnect();
+                  if (v.mixer) v.mixer.disconnect();
+                } catch (e) {
+                  // 忽略斷開連接錯誤
+                }
+              }, 400);
+              const el = document.querySelector('[data-id="' + id + '"]');
+              if (el) el.classList.remove('active');
+            }
+          }
+        }
+        activeVoices.clear();
+        sustained.clear();
+      }
+
+      // 更新樂器顯示
+      function updateInstrumentDisplay() {
+        const instrument = instrumentEl.value;
+        if (instrument === 'strings') {
+          currentInstrumentIcon.textContent = '🎻';
+          currentInstrumentName.textContent = '弦樂';
+        } else if (instrument === 'violin') {
+          currentInstrumentIcon.textContent = '🎻';
+          currentInstrumentName.textContent = '小提琴';
+        } else if (instrument === 'flute') {
+          currentInstrumentIcon.textContent = '🎵';
+          currentInstrumentName.textContent = '長笛';
+        } else if (instrument === 'guitar') {
+          currentInstrumentIcon.textContent = '🎸';
+          currentInstrumentName.textContent = '吉他';
+        } else {
+          currentInstrumentIcon.textContent = '🎹';
+          currentInstrumentName.textContent = '鋼琴';
+        }
+      }
+      
+      // 更新曲目列表顯示
+      function updateSongsList() {
+        if (songs.length === 0) {
+          songsList.innerHTML = '<div class="empty-state">暫無曲目</div>';
+          return;
+        }
+        
+        songsList.innerHTML = songs.map((song, index) => {
+          const isActive = index === currentSongIndex ? 'active' : '';
+          return `<div class="song-item ${isActive}" data-index="${index}">${song.name}</div>`;
+        }).join('');
+        
+        // 添加點擊事件
+        songsList.querySelectorAll('.song-item').forEach(item => {
+          item.addEventListener('click', () => {
+            const index = parseInt(item.dataset.index);
+            currentSongIndex = index;
+            updateSongsList();
+            // 可以在這裡添加載入曲目的邏輯
+          });
+        });
+      }
+      
+      // 新增曲目（打開新網頁）
+      function addNewSong() {
+        const songName = prompt('請輸入曲目名稱：');
+        if (songName && songName.trim()) {
+          songs.push({ name: songName.trim(), notes: [] });
+          currentSongIndex = songs.length - 1;
+          updateSongsList();
+          
+          // 打開新網頁
+          const newWindow = window.open('', '_blank', 'width=800,height=600');
+          if (newWindow) {
+            newWindow.document.write(`
+              <!DOCTYPE html>
+              <html lang="zh-Hant">
+              <head>
+                <meta charset="utf-8">
+                <meta name="viewport" content="width=device-width, initial-scale=1">
+                <title>編輯曲目 - ${songName}</title>
+                <style>
+                  body {
+                    font-family: ui-sans-serif, system-ui, -apple-system, Segoe UI, Roboto, "Noto Sans", Arial;
+                    background: #0b0f13;
+                    color: #e5e7eb;
+                    padding: 20px;
+                    margin: 0;
+                  }
+                  h1 {
+                    color: #60a5fa;
+                    margin-bottom: 20px;
+                  }
+                  .editor {
+                    background: #0f172a;
+                    border: 1px solid #1f2937;
+                    border-radius: 12px;
+                    padding: 20px;
+                  }
+                  textarea {
+                    width: 100%;
+                    min-height: 300px;
+                    background: #0b1220;
+                    border: 1px solid #1f2937;
+                    border-radius: 8px;
+                    padding: 12px;
+                    color: #e5e7eb;
+                    font-family: monospace;
+                    font-size: 14px;
+                    resize: vertical;
+                  }
+                  .btn {
+                    background: #60a5fa;
+                    border: none;
+                    color: white;
+                    border-radius: 8px;
+                    padding: 10px 20px;
+                    margin-top: 15px;
+                    cursor: pointer;
+                    font-size: 14px;
+                  }
+                  .btn:hover {
+                    background: #3b82f6;
+                  }
+                </style>
+              </head>
+              <body>
+                <h1>編輯曲目：${songName}</h1>
+                <div class="editor">
+                  <p>在此編輯曲目內容...</p>
+                  <textarea placeholder="輸入曲目資訊或音符..."></textarea>
+                  <button class="btn" onclick="window.close()">關閉</button>
+                </div>
+              </body>
+              </html>
+            `);
+            newWindow.document.close();
+          }
+        }
+      }
+
+      // 控制
+      volumeEl.addEventListener('input', () => { ensureAudio(); masterGain.gain.setTargetAtTime(parseFloat(volumeEl.value), audio.currentTime, 0.01); });
+      sustainEl.addEventListener('change', () => { sustain = sustainEl.checked; if (!sustain) flushSustain(); });
+      octaveEl.addEventListener('change', () => { baseOctave = parseInt(octaveEl.value, 10); build(); });
+      instrumentEl.addEventListener('change', () => { 
+        flushAllKeys();
+        updateInstrumentDisplay();
+      });
+      addSongBtn.addEventListener('click', addNewSong);
+      powerEl.addEventListener('click', async () => {
+        ensureAudio();
+        if (audio.state === 'suspended') await audio.resume();
+        powerEl.textContent = '音訊已啟動';
+        powerEl.disabled = true;
+        powerEl.classList.remove('primary');
+      });
+
+      build();
+      updateInstrumentDisplay();
+      updateSongsList();
+    })();
+  </script>
+</body>
